@@ -8,6 +8,7 @@ install_requires = [
     "pyOpenSSL==21.0.0",
     "brotli",
     "hpack==4.0.0",
+    "PySocks==1.7.1",
 
 ]
 
@@ -32,7 +33,7 @@ class PyTest(TestCommand):
 packages = find_packages()
 setup(
     name = "pyhttpx",
-    version = "2.10.2",
+    version = "2.10.12",
     keywords = ["pip", "pyhttpx"],
     description = "HTTP library.",
     long_description = "HTTP library, TLS supported version：tls1.2/tls1.3, HTTP supported version: http1.1/http2",

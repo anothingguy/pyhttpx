@@ -13,7 +13,8 @@ from pyhttpx.layers.tls.pyaiossl import SSLContext,PROTOCOL_TLSv1_2
 from pyhttpx.exception import (
     SwitchingProtocolError,
     SecWebSocketKeyError,
-    WebSocketClosed
+    WebSocketClosed,
+    ConnectionClosed
 )
 
 DEFAULT_HEADERS = {
@@ -169,12 +170,10 @@ class WebSocketClient:
             raise OverflowError('data length more than 64 byte')
 
         mask_key = os.urandom(4)
-
         s += mask_key
         for i in range(len(data)):
             n = ord(data[i]) ^ (mask_key[i % 4])
             s += struct.pack('!B', n)
-
 
         await self.sock.sendall(s)
 
@@ -182,7 +181,6 @@ class WebSocketClient:
         self.cache_buffer += data
     async def handle(self):
 
-        #self.cache_buffer += data
         if len(self.cache_buffer) < 2:
             return
 
@@ -191,29 +189,33 @@ class WebSocketClient:
         opcode = frame_head & 0b1111
         payload_len = self.cache_buffer[1] & 0b1111111
         per_message_compressed = frame_head >> 6 & 1
+        try:
+            if payload_len < 126:
+                n = 2
+                msg_len = payload_len
+                msg = self.cache_buffer[n:n + msg_len]
+                self.cache_buffer = self.cache_buffer[n + msg_len:]
+            elif payload_len == 126:
+                n = 4
+                msg_len = struct.unpack('!H', self.cache_buffer[2:n])[0]
+                msg = self.cache_buffer[n:n + msg_len]
+                self.cache_buffer = self.cache_buffer[n + msg_len:]
+            else:
+                n = 10
+                msg_len = struct.unpack('!Q', self.cache_buffer[2:n])[0]
+                msg = self.cache_buffer[n:n + msg_len]
+                self.cache_buffer = self.cache_buffer[n + msg_len:]
 
-        if payload_len < 126:
-            n = 2
-            msg_len = payload_len
-            msg = self.cache_buffer[n:n + msg_len]
-            self.cache_buffer = self.cache_buffer[n + msg_len:]
-        elif payload_len == 126:
-            n = 4
-            msg_len = struct.unpack('!H', self.cache_buffer[2:n])[0]
-            msg = self.cache_buffer[n:n + msg_len]
-            self.cache_buffer = self.cache_buffer[n + msg_len:]
-        else:
-            n = 10
-            msg_len = struct.unpack('!Q', self.cache_buffer[2:n])[0]
-            msg = self.cache_buffer[n:n + msg_len]
-            self.cache_buffer = self.cache_buffer[n + msg_len:]
-
-
+        except Exception:
+            return
+        
         while len(msg) < msg_len:
             #数据长度不足,缓存中的数据还属于当前帧,继续读取
             d = await self.sock.recv(msg_len)
             msg += d
 
+        self.cache_buffer += msg[msg_len:]
+        msg = msg[:msg_len]
         if per_message_compressed:
             msg = zlib.decompressobj(-zlib.MAX_WBITS).decompress(msg)
 
@@ -254,13 +256,10 @@ class WebSocketClient:
                 return result
             try:
                 data = await self.sock.recv(2 ** 14)
-            except ConnectionResetError:
+            except Exception:
                 self.open = False
                 raise WebSocketClosed('webscoket Closed')
             else:
-                if data is None:
-                    self.open = False
-                    raise WebSocketClosed('webscoket Closed')
                 await self.flush(data)
 
 

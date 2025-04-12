@@ -15,6 +15,7 @@ class WSS:
         self.url = url
         self.headers = headers
         self.loop = loop
+
     async def connect(self):
 
         self.sock = await WebSocketClient(url=self.url,
@@ -23,14 +24,17 @@ class WSS:
                                           ).connect()
 
         print('连接成功...')
+
     async def send(self):
-        await self.sock.send('666')
-        pass
+
+        await self.sock.send('3301')
+
 
     async def recv(self):
         while 1:
             r = await self.sock.recv()
             print(r)
+
 def main():
     loop = asyncio.get_event_loop()
     url = 'wss://www.python-spider.com/api/challenge62'
@@ -39,7 +43,7 @@ def main():
         'Connection': 'Upgrade',
         'Pragma': 'no-cache',
         'Cache-Control': 'no-cache',
-        'Origin': 'www.python-spider.com',
+        'Origin': 'https://www.python-spider.com',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
         'Upgrade': 'websocket',
         'Sec-WebSocket-Version': '13',
@@ -48,6 +52,7 @@ def main():
         'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
 
 }
+
     wss = WSS(url, headers, loop)
     loop.run_until_complete(wss.connect())
     loop.create_task(wss.send())
@@ -56,3 +61,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+

@@ -228,12 +228,12 @@ class ExtSupportdVersions(_BaseExtension):
         payload,
     ]
     def dump(self, host, context):
-
+        #context.tls_max = 3
         if context.browser_type == 'chrome':
             if getattr(context, 'tls_max') == 3:
-                self.payload = '\x04\x8a\x8a\x03\x03'
+                self.payload = '\x04\x1a\x1a\x03\x03'
             else:
-                self.payload = '\x06\x8a\x8a\x03\x04\x03\x03'
+                self.payload = '\x06\x1a\x1a\x03\x04\x03\x03'
 
         else:
             self.payload = '\x04\x03\x04\x03\x03'
@@ -252,7 +252,7 @@ class ExtCompressCertificate(_BaseExtension):
 
 class ExtPadding(_BaseExtension):
     _type = 0x15
-    payload = bytes(random.randint(100,300))
+    payload = bytes(random.randint(100,100))
     fields_desc = [
         _type,
         payload,

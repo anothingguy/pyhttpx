@@ -110,6 +110,7 @@ class Response(object):
 
         protocol_raw,headers_raw = buffer[0],buffer[1:]
         self.status_code = int(protocol_raw.split(' ')[1])
+
         for head in headers_raw:
             k,v = head.split(': ', 1)
             k,v = k.lower().strip(),v.strip()
@@ -125,21 +126,41 @@ class Response(object):
         if not self.headers and b'\r\n\r\n' in self.plaintext_buffer:
             header_buffer,self.plaintext_buffer = self.plaintext_buffer.split(b'\r\n\r\n', 1)
             self.headers = self.handle_headers(header_buffer)
-
+            if self.status_code == 204:
+                self.read_ended = True
             if self.headers.get('content-length'):
                 self.content_length = int(self.headers.get('content-length', 0))
             else:
                 self.content_length = None
 
             if self.content_length == 0:
+
                 self.read_ended = True
 
         if self.headers:
-            if self.transfer_encoding == self.headers.get('transfer-encoding'):
-                #chunked 
-                if self.plaintext_buffer.endswith(b'0\r\n\r\n'):
+
+            if 'chunked'  == self.headers.get('transfer-encoding'):
+                #chunked
+                tmp = self.plaintext_buffer
+                while 1:
+                    if b'\r\n' == tmp[:2]:
+                        tmp=tmp[2:]
+                    if b'\r\n' not in tmp:
+                        break
+                    pl,pt = tmp.split(b'\r\n', 1)
+
+                    pn = int(pl.decode(), 16)
+                    if pn == 0:
+                        self.read_ended = True
+                        break
+                    elif len(pt) < pn + 2:
+                        break
+                    else:
+                        tmp = tmp[len(pl) + 2 + pn:]
+
+                if self.read_ended:
                     self.body = self.plaintext_buffer
-                    self.read_ended = True
+
 
             else:
 
@@ -156,8 +177,10 @@ class Response(object):
         if self._content:
             return self._content
         else:
-            if self.headers.get('transfer-encoding') == self.transfer_encoding :
+
+            if self.headers.get('transfer-encoding') == 'chunked' :
                 str_chunks = self.body
+
                 html = b''
                 m = memoryview(str_chunks)
                 right = 0
@@ -174,6 +197,8 @@ class Response(object):
             else:
                 self._content = self.body
 
+        if self._content == b'':
+            return b''
 
         content_encoding =  self.headers.get('content-encoding')
         if content_encoding == 'gzip':
@@ -192,7 +217,7 @@ class Response(object):
     def text(self):
         return self.content.decode(encoding=self.encoding)
 
-    @property
+
     def json(self):
         return json.loads(self.text)
 
@@ -229,16 +254,13 @@ class Http2Response(object):
         if frame[3] == 1:
             # 头部
             if body[:3] == b'\x3f\xe1\x5f':
-                #
                 i = 3
-
             elif body[:4] == b'?\xe1\xff\x03':
                 i = 4
             else:
                 i= 0
 
             data = self.hpack_decode.decode(body[i:])
-
             for h in data:
                 k,v = h
                 if k == 'set-cookie':
@@ -248,11 +270,14 @@ class Http2Response(object):
 
             if self.headers.get('content-length') != None:
                 self.content_length = int(self.headers.get('content-length', 0))
+
             self.status_code = int(self.headers.get(':status', 200))
+            if self.content_length == 0 or self.status_code== 204:
+                
+                self.read_ended = True
 
         elif frame[3] == 0:
             self.body += body
-
             if head[4] == 1:
                 self.read_ended = True
 
@@ -292,6 +317,8 @@ class Http2Response(object):
             else:
                 self._content = self.body
 
+        if self._content == b'':
+            return b''
         content_encoding =  self.headers.get('content-encoding')
         if content_encoding == 'gzip':
             self._content = gzip.decompress(self._content)
@@ -309,7 +336,7 @@ class Http2Response(object):
     def text(self):
         return self.content.decode(encoding=self.encoding)
 
-    @property
+
     def json(self):
         return json.loads(self.text)
 

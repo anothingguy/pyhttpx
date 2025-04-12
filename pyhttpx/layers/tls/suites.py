@@ -8,14 +8,7 @@ CIPHER_SUITES = [
     0x002f,0x0035
 ]
 
-if 1==0:
-    CIPHER_SUITES = [
 
-        #0xc02b,0xc02f,
-        #0xcca8,0xcca9,
-        0x002f,0x0035,
-
-    ]
 TLS_SUITES = {
     0x1301: {'name': 'TLS_AES_128_GCM_SHA256','key_len': 16,
              'sha': 'sha256','type': 'aead','kct': 'ECDHE',},

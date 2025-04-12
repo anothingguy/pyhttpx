@@ -30,7 +30,7 @@ from pyhttpx.exception import (
     ReadTimeout,
 )
 
-from pyhttpx.layers.tls.socks import SocketProxy
+from pyhttpx.layers.tls.pysocks import SocketProxy
 from pyhttpx.utils import vprint
 
 
@@ -162,14 +162,11 @@ class TLSSocket:
     async def recv(self, size=4096):
 
         s = await self.reader.read(size)
-        if not s:
-            return None
+        if size > 0 and s == b'':
+            raise ConnectionClosed('server closed')
 
         s = self.cache + s
         self.cache = b''
-
-        # 会存在读取长度不足而返回空字符,而不是收到fin
-        exc_alert = False
         while s and len(s) >= 5:
 
             handshake_type = struct.unpack('!B', s[:1])[0]
@@ -184,19 +181,13 @@ class TLSSocket:
             if handshake_type == 0x17:
                 p = self.tls_cxt.decrypt(flowtext, b'\x17')
                 self.plaintext_reader += p
-
-
             elif handshake_type == 0x15:
                 self.isclosed = True
-                exc_alert = True
                 raise ConnectionClosed('server closed')
 
-        b = self.plaintext_reader
+        p = self.plaintext_reader
         self.plaintext_reader = b''
-        if exc_alert:
-            b = None
-        return b
-
+        return p
 
 
 PROTOCOL_TLSv1_2 = b'\x03\x03'
@@ -220,10 +211,10 @@ class SSLContext:
     def set_payload(self, browser_type=None,
                     ja3=None,
                     exts_payload=None,
-                    shuffle_extension_protocol=None):
+                    shuffle_proto=None):
         self.browser_type = browser_type or 'chrome'
         self.exts_payload = exts_payload
-        self.shuffle_extension_protocol = shuffle_extension_protocol
+        self.shuffle_proto = shuffle_proto
         #https://www.rfc-editor.org/rfc/rfc8701
         grease_list = [
             0x0A0A, 0x1A1A,
@@ -264,7 +255,7 @@ class SSLContext:
                 grease_ext2 = choose_grease()
                 self.grease_group = choose_grease()
                 exts = [grease_ext1,65281,18,27,43,0,5,51,13,11,17513,35,45,23,16,10,grease_ext2,21]
-                if self.shuffle_extension_protocol:
+                if self.shuffle_proto:
                     random.shuffle(exts)
 
                 exts = '-'.join(map(lambda x:str(x), exts))
@@ -275,7 +266,7 @@ class SSLContext:
             else:
                 #firefox_j,a3
                 exts=[0,23,65281,10,11,35,16,5,34,51,43,13,45,28,21]
-                if self.shuffle_extension_protocol:
+                if self.shuffle_proto:
                     random.shuffle(exts)
                 exts = '-'.join(map(lambda x:str(x), exts))
                 self.ja3 = f"771,4865-4867-4866-49195-49199-52393-52392-49196-49200-49162-49161-49171-49172-156-157-47-53,{exts},29-23-24-25-256-257,0"

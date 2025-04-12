@@ -82,6 +82,7 @@ class TLSSessionCtx(object):
         self.tls13 = False
 
         self.tls_version = b'\x03\x03'
+        self.tls_max = 3
         name_curve = 0x001d
         self.group_x25519_key = CryptoContextFactory.crypto_container[
             name_curve].client_kx_privkey.public_key().public_bytes(
